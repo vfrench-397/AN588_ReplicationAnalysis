@@ -27,11 +27,20 @@ library(broom)
 ```
 
 Required Data: 
+
+This data set contains the 
 ```{r}
 s <- curl('https://raw.githubusercontent.com/vfrench-397/AN588_ReplicationAnalysis/main/Data/Radiocarbon_site_data.csv')
-site.data <- read.csv(file = s, header = TRUE, stringsAsFactors = TRUE) #general site information
+site.data <- read.csv(file = s, header = TRUE, stringsAsFactors = TRUE) #general site classifications for each plot (moisture class, stand age and stand age class)
+head(site.data)
+```
+
+
+
+```{r}
 d <- curl('https://raw.githubusercontent.com/vfrench-397/AN588_ReplicationAnalysis/main/Data/Soil_radiocarbon_data.csv')
-soil.data <- read.csv(file = d, header = TRUE, stringsAsFactors = TRUE) #carbon-14 quantities 
+soil.data <- read.csv(file = d, header = TRUE, stringsAsFactors = TRUE) #radioactive C data for site soil depth increments and atmosphere at the time of stand establishment
+head(soil.data)
 ```
 
 ## Background 
@@ -42,7 +51,7 @@ When wildfires sweep through boreal regions, they combust the exposed soil organ
 
 With increasing frequency and severity of wildfire events as a result of global warming, these legacy carbon pools are under threat.
 
-This analysis uses relative radiocarbon dating of the carbon-14 isotope to assess the proportion of sites across the Northwest Territory, Canada that possessed and retained their legacy C pools after burning events in 2014. Legacy C was identified (through radiocarbon dating) as any organic soil C that is older than the stand age (time since previous burning event). 
+The goal of the original paper was to assess legacy C loss in sites across the Northwest Territory, Canada by identifying sites that possessed legacy C before and retained their legacy C pools after a burning event in 2014. Sites present with Legacy C were identified (through radiocarbon dating) as sites with any organic soil C that is older than the stand age (time since previous burning event). 
 
 
 ## Experimental Design 
@@ -55,25 +64,29 @@ Site establishment was dated based on tree rings.
 
 ## Hypotheses
 
-The most significant predictors of legacy C presence and retention will be soil moisture class and stand age as these are reported to be the most influential factors contributing to SOL combustion and accumulation.
-
-1. Legacy C will be present more frequently in wet ecosystems (high soil organic matter (SOM) C accumulation due to low decomposition rates and low burn severity). Legacy C will be present less frequently (if at all) in dry ecosystems (low SOM accumulation and higher severity burns)
+1. Legacy C is more likely to be present in wet ecosystems (high soil organic matter (SOM) C accumulation due to low decomposition rates and low burn severity). Legacy C is less likely to be present in dry ecosystems (low SOM accumulation and higher severity burns)
 2. Legacy C is more likely to combust in historically moist (moderate) ecosystems due to their larger legacy C pools (ability to harbor legacy C previously) and their higher burn risk under drought and increasing wildfire severity.
 3. Legacy C is more likely to combust in young stands because the natural protective layer of SOM has not yet re-accumulated. 
 
+## Analysis outline 
+
+The original paper conducted Firth's bias reduced logistic regression to assess the above hypotheses whether the presence of legacy C could be predicted from stand age and the prefire SOL depth (which is acting as a proxy for moisture class), and whether the combustion of legacy C could be predicted from the stand age and the proportion of the SOL burned (which is acting as a proxy for fire severity). They used Firth's logistic regression to reduce problems associated with highly predictive covariates, common in generalized linear model regressions using smaller sample sizes. I attempted the Firth's bias reduced logistic regression using the `{logistf}` package as well as the standard logistic regression using the `glm()` function and neither produced significant results so I kept in the standard regression code to condense the size of this report. 
+
+The authors used AIC to test for interactions between covariates in which they found that the interaction term between predictor variables could be dropped for the final model. I found a similar result running log-likelihood tests so I did not replicate the AIC model selection. 
+
+Finally, the original authors explored mixed modeling using individual fires as a random effect but found the mixed modelling did not produce significantly different results than the logistic regression and so again I did not replicate this analysis. 
+
 ## Presence of Legacy C
 
-To identify plots that possess legacy C, the $\Delta^{14}C$ values of the basal organic soil layer were compared to $\Delta^{14}CO_2$  values of the atmosphere during the year of stand establishment. 
+To identify plots that possess legacy C, the $\Delta^{14}C$ values of the basal organic soil layer were compared to $\Delta^{14}CO_2$  values of the atmosphere during the year of stand establishment. Legacy C was considered present if the base of the SOL was older than the year of stand establishment (meaning $\Delta^{14}C$ lower (having decayed for longer) than $\Delta^{14}CO_2$). Therefore the first step is to extract basal SOL C values from the larger data set. 
 
-Legacy C was considered present if the base of the SOL was older than the year of stand establishment (meaning $\Delta^{14}C$ lower (having decayed for longer) than $\Delta^{14}CO_2$). 
-
-Therefore the first step is to extract basal SOL C values from the larger data set. 
 ```{r}
 basal.layer <- soil.data[soil.data$increment_location == 'BOTTOM', ]
 basal.layer <- basal.layer[duplicated(basal.layer$burned_site_plot) == FALSE,] 
 ```
 
-Next we determine and label the presence/absence of legacy carbon for each plot. 
+Next we determine and label the presence/absence of legacy carbon for each plot using a for loop with embedded if/else conditions. 
+
 ```{r}
 basal.layer$LC <- NULL
 for (i in 1:nrow(basal.layer)) {
@@ -92,26 +105,28 @@ sum(basal.layer$LC == 'Present') #number of sites determined to possess legacy C
 
 ### Data Visualization 
 
-For visualization, we must manipulate the data, combine the carbon measurements of the basal soil layer and the atmosphere at stand establishment into a single variable, for the ggplot object. 
+For visualization, we must manipulate the data, combining the carbon measurements of the basal soil layer and the atmosphere at time of stand establishment into a single variable, for the ggplot object. 
 
 ```{r}
-basal.carbon <- basal.layer[,c('burned_site_plot', 'soil_depth_increment', 'Delta14C', 'soil_class_pre.post_bomb', 'stand_age_pre.post_bomb', 'LC')]
-basal.carbon$type <- 'Soil.Base'
+basal.carbon <- basal.layer[,c('burned_site_plot', 'soil_depth_increment', 'Delta14C', 'soil_class_pre.post_bomb', 'stand_age_pre.post_bomb', 'LC')] #extract Delta14C and other associated site information
+basal.carbon$type <- 'Soil.Base' #designate delta 14 C as class soil base 
 names(basal.carbon) <- c('Plot', 'Depth', 'Delta.14.C', 'Soil.Class','Stand.Class','LC', 'Location')
 basal.stand.age <- basal.layer[,c('burned_site_plot', 'soil_depth_increment', 'X14C_yr_stand_age', 'soil_class_pre.post_bomb', 'stand_age_pre.post_bomb', 'LC')]
-basal.stand.age$type <- 'Stand.Age'
+basal.stand.age$type <- 'Stand.Age' #designate atm C as a class stand age 
 names(basal.stand.age) <- c('Plot', 'Depth', 'Delta.14.C', 'Soil.Class', 'Stand.Class','LC', 'Location')
 legacy.carbon <- rbind(basal.carbon, basal.stand.age)
 ```
 
-And divide the legacy carbon data set into pre and post bomb peak sites. 
+Divide the legacy carbon data set into pre and post bomb peak sites. 
 ```{r}
 legacy.carbon.pre <- legacy.carbon[legacy.carbon$Stand.Class == 'pre',]
 legacy.carbon.post <- legacy.carbon[legacy.carbon$Stand.Class == 'post',]
 ```
 
+Then we can plot basal layer $\Delta^{14}C$ against atmospheric $\Delta^{14}CO_2$ at time of stand establishment (pre and post bomb peak) 
 
-Then we can plot basal layer $\Delta^{14}C$ against atmospheric $\Delta^{14}CO_2$ at time of stand establishment (pre and post bomb peak) (Figure 2 from original paper)
+![Figure 2 b and c from original paper](img/Figure.2_siteC.png)
+
 ```{r}
 ggplot(legacy.carbon.pre, aes(x= Location, y = Delta.14.C)) + geom_point(aes(shape = Location, color = Location), size = 3) + geom_line(aes(group = Plot, linetype = LC), color = 'black') + theme_bw() + scale_color_manual(values = c('darkgreen','darkred')) + labs(x = NULL, y = 'Delta 14 Carbon (parts per thousand)', linetype = 'Legacy Carbon')
 ```
@@ -127,10 +142,10 @@ ggplot(legacy.carbon.post, aes(x= Location, y = Delta.14.C)) + geom_point(aes(sh
 We can also visualize the relationship between C and our expected predictor variables. 
 
 ```{r}
+#Creating a data set that has both our predictor and response variables so we can plot the relationships and call on it during the regression.
 log.r.data <- cbind(basal.layer, site.data)
 log.r.data <- log.r.data[,-c(21,22)]
 ```
-
 
 ```{r}
 ggplot(data = log.r.data, aes(x = LC, y = stand_age_rings)) + geom_boxplot(aes(color = LC)) + theme_bw() + labs(title = 'Legacy C v. Stand Age', x = 'Legacy Carbon', y = 'Stand Age (yr)') + scale_color_manual(values = c('darkgreen', 'darkred')) + theme(legend.position="none") + geom_hline(aes(yintercept = 60), linetype = 'dashed')
@@ -145,7 +160,6 @@ ggplot(data = log.r.data, aes(x = stand_age_class, y = Delta14C)) + geom_boxplot
 ```
 
 > Caption: Stand age class (old = green and young = red) plotted against basal $\Delta^{14}C$ levels to establish historic burn cycle effects on C combustion and accumulation. The boxplot displays the median. The two hinges represent the first and third quartiles (25th and 75th percentiles). The lower and upper whiskers extend from the smallest and largest values respectively to no further than 1.5 * IQR (inter-quartile range). 
-
 
 ```{r}
 ggplot(data = log.r.data, aes(x = LC, y = prefire_sol_depth)) + geom_boxplot(aes(color = LC)) + theme_bw() + labs(title = 'Legacy Carbon v. Prefire SOL Depth ', x = 'Legacy Carbon', y = 'Prefire SOL depth (cm)') + scale_color_manual(values = c('darkgreen', 'darkred')) + theme(legend.position="none")
@@ -163,9 +177,8 @@ ggplot(data = log.r.data, aes(x = moisture_class, y = prefire_sol_depth)) + geom
 
 ### Multiple Logistic Regression
 
-We will generate a generalized linear model for this data because we cannot assume a normal distribution of our response variable or its residuals and therefore cannot fit the assumptions of a general linear model. We use a logistic regression, a form of a generalized linear model, because our response variable is binary (presence or absence of legacy C) so we must use the logit link function to calculate the natural log of the odds ratio between our two possible outcomes and use that output as our response variable. 
+We will generate a generalized linear model for this data because we cannot assume a normal distribution of our response variable or its residuals and therefore cannot fit the assumptions of a general linear model. We use a logistic regression, a form of a generalized linear model, because our response variable is binary (presence or absence of legacy C) so we must use the logit link function to calculate the natural log of the odds ratio between our two possible outcomes and use that output as our response variable. When preparing the data to be placed into the ```glm()``` function we need to make sure our variables are factored to avoid fitting errors when running the regression. 
 
-When preparing the data to be placed into the ```glm()``` function we need to make sure our variables are factored to avoid fitting errors when running the regression. 
 ```{r}
 log.r.data$LC <- as.factor(log.r.data$LC)
 levels(log.r.data$LC)
@@ -199,7 +212,7 @@ anova(reduced.presence, full.presence, test = 'Chisq')
 
 Here the chi-squared p value is not significant so the inclusion of the interaction term does not significantly decrease deviance and we can resume with the reduced model. 
 
-We can also run a log -likelihood test using the ```lrtest()``` from the `{lmtest}` package 
+We can also run a log-likelihood test using the ```lrtest()``` from the `{lmtest}` package 
 
 ```{r}
 lrtest(reduced.presence, full.presence) 
@@ -207,8 +220,7 @@ lrtest(reduced.presence, full.presence)
 
 Here the higher log likelihood value indicates a greater model fit, but the chi-squared p value is not significant so even though the full model has a 'better' fit it is not significantly better. Therefore, again we can proceed with utilizing the reduced model for our analysis.  
 
-Next, we must compare the accepted model, the reduced model, against the null model
-
+Next, we must compare the accepted model(the reduced model) against the null model
 ```{r}
 anova(null.presence, reduced.presence, test = 'Chisq') 
 ```
@@ -221,15 +233,12 @@ Our slope estimate ($\beta1$) now represents the associated change in the respon
 
 The coefficient/estimate for prefire SOL depth was positive. Therefore increasing prefire SOL depth results in an increased likelihood of legacy C being present. For every one cm of prefire SOL depth, the probability of legacy being present increases by 0.079485. Where the estimate for stand age is negative indicating every year the stand ages the likelihood of legacy C being present decreased by  0.014321. Even though neither of these relationships showed a significant p-value. 
 
-In order to get the actual odds ratio we must back transform the estimates using the reverse of the link function.
-
-We can find the reverse of the logit link function from the model 
+In order to get the actual odds ratio we must back transform the estimates using the reverse of the link function. We can find the reverse of the logit link function by pulling it from the model. 
 
 ```{r}
 fam <- family(reduced.presence)
 rev.logit <- fam$linkinv #eta function
 ```
-
 
 ```{r}
 SOL.depth.change <- rev.logit(reduced.presence$coefficients[2])
@@ -246,18 +255,17 @@ stand.age.change
 
 To test our null hypothesis that the response variable (Legacy C presence) and our predictor variables have no relationship, we can calculate the Wald statistic (similar to a t-statistic) for each predictor variable and compare them to the z distribution. 
 
-Calculating the Wald Statistic for SOL depth 
+ 
 ```{r}
-library(broom)
+# Calculating the Wald Statistic for SOL depth
 modelresults <- tidy(reduced.presence)
 wald <- modelresults$estimate[2]/modelresults$std.error[2]
 p <- 2 * (1 - pnorm(wald))  # calculation of 2 tailed p value associated with the Wald statistic
 p
 ```
 
-for stand age
 ```{r}
-library(broom)
+#Wald statistic for stand age
 modelresults <- tidy(reduced.presence)
 wald <- modelresults$estimate[3]/modelresults$std.error[3]
 p <- 2 * (1 - pnorm(wald))  # calculation of 2 tailed p value associated with the Wald statistic
@@ -269,13 +277,14 @@ Again neither predictor variable seems to show a significant p-value.
 #### Confidence Intervals 
 
 Finally, we can calculate the confidence intervals around our estimates 
+
 ```{r}
 CI <- confint.default(reduced.presence, level = 0.95) # this function returns CIs based on standard errors instead of based on log-likelihood 
 CI
 ```
 
-Calculating the CIs for the actual odds ratios
 ```{r}
+#Calculating the CIs for the actual odds ratios
 SOL.depth.changeCI <- rev.logit(CI[2, ]) #for prefire SOL depth
 stand.age.changeCI <- rev.logit(CI[3, ]) #for stand age 
 
@@ -316,7 +325,7 @@ Then we have to generate a new range of values of our predictor variables for wh
 
 ```{r}
 new.sol.depth <- as.data.frame(seq(min(log.r.data$prefire_sol_depth),max(log.r.data$prefire_sol_depth), length.out = 32))
-names(new.sol.depth) <- 'prefire_sol_depth' 
+names(new.sol.depth) <- 'prefire_sol_depth' #must rename the column so the predict() function can match the model to the new data 
 ```
 
 ```{r}
@@ -324,10 +333,14 @@ new.stand.age <- as.data.frame(seq(min(log.r.data$stand_age_rings),max(log.r.dat
 names(new.stand.age) <- 'stand_age_rings'
 ```
 
-Finally, we can predict the LC values for the generated prefire SOL depth values. 
+We can now predict the LC presence probabilities.
 
 ```{r}
 prediction.sol.depth <- cbind(new.sol.depth,predict(glm.sol.depth, newdata = new.sol.depth, type = 'link', se = TRUE))
+```
+
+```{r}
+prediction.stand.age <- cbind(new.stand.age ,predict(glm.stand.age, newdata = new.stand.age, type = 'link', se = TRUE))
 ```
 
 and generate the upper and lower confidence intervals for each prediction (using 1.96 because it is the approx critical value for 95% CI). Since we argued the response type should be in the link scale we must back transform the CIs (and the fit when plotting) to plot the values on the appropriate response scale. 
@@ -338,34 +351,22 @@ prediction.sol.depth$UL <- rev.logit(prediction.sol.depth$fit + 1.96 * predictio
 head(prediction.sol.depth)
 ```
 
-
-Plot the predicted probabilities and their 95% CI alongside the actual data (Figure 3 from original paper)
-
-```{r}
-p <- ggplot(data = prediction.sol.depth, aes(x= prefire_sol_depth, y = rev.logit(fit))) + geom_line() + geom_ribbon(data = prediction.sol.depth, aes(ymin = LL, ymax = UL), alpha = .2) + labs(x = "Prefire SOL depth (cm)", y ="Pr(Present)", color = 'Moisture Class', shape = 'Stand Age Class') + geom_point(data = log.r.data, aes(x = prefire_sol_depth, y = LC.bin, color = moisture_class, shape = stand_age_class), size = 3.5) + theme_bw() + scale_color_manual(values = c('darkgreen', 'darkred','darkblue')) + ylim(0,1)
-p
-```
-
-> Caption: Predicted probability of Legacy C presence for prefire SOL depth. Actual data points are grouped by stand age class and moisture class. The ribbons represent the 95% confidence interval for the predicted values.
-
-Then we must do the same for the stand age predictor. 
-
-We can predict the LC values for the generated stand age values. 
-
-```{r}
-prediction.stand.age <- cbind(new.stand.age ,predict(glm.stand.age, newdata = new.stand.age, type = 'link', se = TRUE))
-```
-
-and generate the upper and lower confidence intervals for each prediction. 
-
 ```{r}
 prediction.stand.age$LL <- rev.logit(prediction.stand.age$fit - 1.96 * prediction.stand.age$se.fit)
 prediction.stand.age$UL <- rev.logit(prediction.stand.age$fit + 1.96 * prediction.stand.age$se.fit)
 head(prediction.stand.age)
 ```
 
+Finally, plot the predicted probabilities and their 95% CI alongside the actual data 
 
-Plot the predicted probabilities and their 95% CI alongside the actual data (Figure 3 from original paper)
+![Figure 3.a and b from original paper](img/Figure3._modelpredictions.png)
+
+```{r}
+p <- ggplot(data = prediction.sol.depth, aes(x= prefire_sol_depth, y = rev.logit(fit))) + geom_line() + geom_ribbon(data = prediction.sol.depth, aes(ymin = LL, ymax = UL), alpha = .2) + labs(x = "Prefire SOL depth (cm)", y ="Pr(Present)", color = 'Moisture Class', shape = 'Stand Age Class') + geom_point(data = log.r.data, aes(x = prefire_sol_depth, y = LC.bin, color = moisture_class, shape = stand_age_class), size = 3.5) + theme_bw() + scale_color_manual(values = c('darkgreen', 'darkred','darkblue')) + ylim(0,1)
+p
+```
+
+> Caption: Predicted probability of Legacy C presence for prefire SOL depth. Actual data points are grouped by stand age class and moisture class. The ribbons represent the 95% confidence interval for the predicted values
 
 ```{r}
 p <- ggplot(data = prediction.stand.age, aes(x= stand_age_rings, y = rev.logit(fit))) + geom_line() + geom_ribbon(data = prediction.stand.age, aes(ymin = LL, ymax = UL), alpha = .2) + labs(x = "Stand Age (yr)", y ="Pr(Present)", color = 'Moisture Class', shape = 'Stand Age Class') + geom_point(data = log.r.data, aes(x = stand_age_rings, y = LC.bin, color = moisture_class, shape = stand_age_class), size = 3.5) + theme_bw() + scale_color_manual(values = c('darkgreen', 'darkred','darkblue')) + ylim(0,1) + geom_vline(aes(xintercept = 60), linetype = 'dashed')
@@ -379,9 +380,8 @@ p
 
 Here we will determine the surface soil establishment date relative to bomb peak by comparing $\Delta^{14}C$ levels at the soil surface to $\Delta^{14}C$ levels at soil depth increment of 2 cm. In natural states, depth should have less C because it is older (more C has decayed & surface layers accumulate vertically). Therefore, if C levels are higher at the surface than at the 2cm depth then the surface is dated as pre bomb peak. If the soil surface has less C than the 2cm depth, the surface layer is determined to be established post bomb peak. These classifications will be important for when we determine legacy C combustion later in the analysis. 
 
-Extract surface layer measurements 
 ```{r}
-surface.layer <- soil.data[soil.data$increment_location == 'TOP',]
+surface.layer <- soil.data[soil.data$increment_location == 'TOP',] #Extract surface layer measurements 
 surface.layer$soil_depth_increment <- as.factor(surface.layer$soil_depth_increment)
 ```
 
@@ -400,22 +400,16 @@ for (i in 1:nrow(surface.layer)) {
 
 ### Data Visualization 
 
-Here we plot the $\Delta^{14}C$ at both soil increments to determine the relative soil surface dates
+We can plot the $\Delta^{14}C$ at both soil increments (1 and 2 cm) to determine the relative soil surface dates. We can plot the pre-bomb and post-bomb sites separately to show the relationship of $\Delta^{14}C$ between both soil increments more clearly. 
 
 ```{r}
-ggplot(surface.layer, aes(x = soil_depth_increment, y = Delta14C)) + geom_point(aes(shape = soil_depth_increment, color = soil_depth_increment), size = 3) + geom_line(aes(group = site_sample_transect, linetype = soil_class_pre.post_bomb)) + theme_bw() + scale_color_manual(values = c('darkgreen','darkred')) + labs(x = 'Soil Depth', y = 'Delta 14 Carbon (parts per thousand)', color = 'Soil Depth', shape = 'Soil Depth', linetype = 'Soil Surface Est. relative to bomb peak')
-```
-
-We can also graph the pre-bomb and post-bomb sites separately to show the relationship of $\Delta^{14}C$ between the 2 soil increments more clearly. 
-
-Divide into pre and pot bomb peak data. 
-```{r}
+#First, divide into pre and pot bomb peak data. 
 surface.layer.pre <- surface.layer[surface.layer$soil_class_pre.post_bomb == 'pre', ]
 surface.layer.post <- surface.layer[surface.layer$soil_class_pre.post_bomb == 'post', ]
 ```
 
+![Figure 2.d and e from original paper](img/Figure.2_siteC.png)
 
-Plot soil surface (soil depth increment of 1) to soil depth increment 2. (pre and post bomb peak) (Figure 2 from original paper)
 ```{r}
 ggplot(surface.layer.pre, aes(x = soil_depth_increment, y = Delta14C)) + geom_point(aes(shape = soil_depth_increment, color = soil_depth_increment), size = 3) + geom_line(aes(group = site_sample_transect, linetype = Age)) + theme_bw() + scale_color_manual(values = c('darkgreen','darkred')) + labs(x = 'Soil Depth', y = 'Delta 14 Carbon (parts per thousand)', color = 'Soil Depth', shape = 'Soil Depth') + scale_x_discrete(labels = c('Surface','2 cm'), breaks = c(1,2))
 ```
@@ -430,7 +424,7 @@ ggplot(surface.layer.post, aes(x = soil_depth_increment, y = Delta14C)) + geom_p
 
 ## Combustion of Legacy C
 
-To assess if legacy C was combusted during the burning event the $\Delta^{14}C$ values of the soil surface samples was compared to atmospheric $\Delta^{14}CO_2$ values at the time of stand establishment (in plots where Legacy C was considered present). Legacy C was considered combusted if the soil surface was older than the stand age. 
+To assess if legacy C was combusted during the burning event the $\Delta^{14}C$ values of the soil surface samples were compared to atmospheric $\Delta^{14}CO_2$ values at the time of stand establishment (only in plots where Legacy C was considered present). Legacy C was considered combusted if the soil surface was older than the stand age. 
 
 Therefore legacy C was combusted in the plot IF: 
 
@@ -443,6 +437,7 @@ Therefore legacy C was combusted in the plot IF:
 **Note**: legacy C was not combusted if the stand age was pre bomb peak and the surface was post bomb peak.
 
 First we can extract the soil surface $\Delta^{14}C$ values. 
+
 ```{r}
 top.surface.layer<- surface.layer[surface.layer$soil_depth_increment == 1,]
 top.surface.layer <- top.surface.layer[duplicated(top.surface.layer$burned_site_plot) == FALSE,] 
@@ -489,7 +484,8 @@ for (i in 1:nrow(legacy.plots)) {
 
 ### Data Visualization 
 
-Manipulate the data for the ggplot object
+First we must manipulate the data for the ggplot object. Again combining our C measurements and assigning them a class. 
+
 ```{r}
 surface.carbon <- legacy.plots[,-17]
 surface.carbon$Location <- 'Soil.Surface'
@@ -501,22 +497,17 @@ colnames(surface.stand.age)[16] <- 'Delta14C'
 legacy.combustion <- rbind(surface.carbon, surface.stand.age)
 ```
 
-Plot the soil surface C levels against the atmospheric $CO_2$ at the time of stand establishment for all of the sites 
-```{r}
-ggplot(legacy.combustion, aes(x= Location, y = Delta14C)) + geom_point(aes(shape = Location, color = Location), size = 3) + geom_line(aes(group = site_sample_transect, linetype = LC)) + theme_bw() + scale_color_manual(values = c('darkgreen','darkred')) + labs(x = NULL, y = 'Delta 14 Carbon (parts per thousand)', linetype = 'Legacy Carbon') + scale_linetype_manual(values = c('dashed', 'solid'))
-```
+Then we can plot the soil surface C levels against the atmospheric $CO_2$ at the time of stand establishment for all of the different site types. 
 
-Here we can't see any clear relationship between the $\Delta^{14}C$ levels of each location. It would be more beneficial to subset the sites into their soil and stand age relative to the bomb peak to really see patterns in how legacy C combustion was determined. 
-
-So first we can subset the legacy plot data set 
 ```{r}
+#subset the legacy plot data set by site type. 
 legacy.combustion.pre.pre <- legacy.combustion[legacy.combustion$stand_age_pre.post_bomb == 'pre' & legacy.combustion$soil_class_pre.post_bomb == 'pre',]
 legacy.combustion.post.pre <- legacy.combustion[legacy.combustion$stand_age_pre.post_bomb == 'post' & legacy.combustion$soil_class_pre.post_bomb == 'pre',]
 legacy.combustion.pre.post <- legacy.combustion[legacy.combustion$stand_age_pre.post_bomb == 'pre' & legacy.combustion$soil_class_pre.post_bomb == 'post',]
 legacy.combustion.post.post <- legacy.combustion[legacy.combustion$stand_age_pre.post_bomb == 'post' & legacy.combustion$soil_class_pre.post_bomb == 'post',]
 ```
 
-Then plot each set of site types separately (Figure 2 from original paper) 
+![Figure 2.f-i from original paper](img/Figure.2_siteC.png)
 
 ```{r}
 ggplot(legacy.combustion.pre.pre, aes(x= Location, y = Delta14C)) + geom_point(aes(shape = Location, color = Location), size = 3) + geom_line(aes(group = site_sample_transect, linetype = LC)) + theme_bw() + scale_color_manual(values = c('darkgreen','darkred')) + labs(x = NULL, y = 'Delta 14 Carbon (parts per thousand)', linetype = 'Legacy Carbon') + scale_linetype_manual(values = c('dashed', 'solid'))
@@ -548,9 +539,8 @@ Similar to when we were assessing legacy C presence or absence, we can look at t
 First we must extract the appropriate plots (where Legacy C was present)
 ```{r}
 combustion.r.data <- log.r.data[log.r.data$LC == 'Present',]
-combustion.r.data$combustion <- legacy.plots$LC
+combustion.r.data$combustion <- legacy.plots$LC #add the combustion class to the new logistic regression data
 ```
-
 
 ```{r}
 ggplot(data = combustion.r.data, aes(x = combustion, y = prefire_sol_depth)) + geom_boxplot(aes(color = combustion)) + theme_bw() + labs(title = 'Combustion v. Prefire SOL depth ', x = 'Legacy Carbon', y = 'Prefire SOL depth (cm)') + scale_color_manual(values = c('darkgreen', 'darkred')) + theme(legend.position="none")
@@ -582,8 +572,6 @@ Then we can move onto model selection
 
 #### Model Selection 
 
-To evaluate the model significance we can compare model fit between a full, a reduced and a null model. In our case the full model will include the interaction terms between the predictor variables stand age and SOL depth. The reduced model will remove only the interaction term between the two predictor variables and the null model will be an intercept only model. 
-
 ```{r}
 full.combustion <- glm(data = combustion.r.data, formula = combustion ~ proportion_sol_burned * stand_age_rings, family = binomial)
 summary(full.combustion) 
@@ -600,7 +588,7 @@ null.combustion <- glm(data = combustion.r.data, formula = combustion ~ 1, famil
 summary(null.combustion) 
 ```
 
-We can compare the models using a log likelihood test which utilizes a ratio of the log-likelihoods as the test statistic and utilizes the Chi-squared distribution to calculate the p-values. Therefore we can run a log-likelihood test by arguing the two models to the ```anova()``` function and additionally including ```test = 'Chisq'``` argument. 
+And compare the models using a log-likelihood test. 
 
 ```{r}
 anova(reduced.combustion, full.combustion, test = 'Chisq') 
@@ -608,7 +596,7 @@ anova(reduced.combustion, full.combustion, test = 'Chisq')
 
 Here the chi-squared p value is not significant so the inclusion of the interaction term does not significantly decrease deviance and we can resume with the reduced model. 
 
-We can also run a log -likelihood test using the ```lrtest()``` from the `{lmtest}` package 
+We can also run a log-likelihood test using the ```lrtest()``` from the `{lmtest}` package 
 
 ```{r}
 lrtest(reduced.combustion, full.combustion) 
@@ -616,7 +604,7 @@ lrtest(reduced.combustion, full.combustion)
 
 Here the higher log likelihood value indicates a greater model fit, but again the chi-squared p value is not significant so even though the full model has a 'better' fit it is not significantly better. Therefore, again we can proceed with utilizing the reduced model for our analysis.  
 
-Next, we must compare the accepted model, the reduced model, against the null model
+Next, we must compare the accepted model(the reduced model) against the null model
 ```{r}
 anova(null.combustion, reduced.combustion, test = 'Chisq') 
 ```
@@ -638,23 +626,23 @@ prop.sol.burned.change
 stand.age.change
 ```
 
-1 unit increase in SOL depth results in a 99% increase in the likelihood of Legacy C combustion
+1 unit increase in proportion of SOL burned results in a 99% increase in the likelihood of Legacy C combustion
 1 unit increase in stand age results in a 49% decrease in the likelihood of Legacy C combustion
 
 #### Hypothesis Testing 
 
 To test our null hypothesis that the response variable (Legacy C combustion) and our predictor variables have no relationship, we can calculate the Wald statistic (similar to a t-statistic) for each predictor variable and compare them to the z distribution. 
 
-Calculating the Wald Statistic for proportion of SOL burned 
 ```{r}
+#Calculating the Wald Statistic for proportion of SOL burned 
 modelresults <- tidy(reduced.combustion)
 wald <- modelresults$estimate[2]/modelresults$std.error[2]
 p <- 2 * (1 - pnorm(wald))  # calculation of 2 tailed p value associated with the Wald statistic
 p
 ```
 
-for stand age
 ```{r}
+#for stand age
 modelresults <- tidy(reduced.combustion)
 wald <- modelresults$estimate[3]/modelresults$std.error[3]
 p <- 2 * (1 - pnorm(wald))  # calculation of 2 tailed p value associated with the Wald statistic
@@ -671,8 +659,8 @@ CI <- confint.default(reduced.combustion, level = 0.95) # this function returns 
 CI
 ```
 
-Calculating the CIs for the actual odds ratios
 ```{r}
+#Calculating the CIs for the actual odds ratios
 prop.sol.burned.changeCI <- rev.logit(CI[2, ]) #for prefire SOL depth
 stand.age.changeCI <- rev.logit(CI[3, ]) #for stand age 
 
@@ -719,13 +707,17 @@ new.stand.age <- as.data.frame(seq(min(combustion.r.data$stand_age_rings),max(co
 names(new.stand.age) <- 'stand_age_rings'
 ```
 
-Predict the Combustion status for the generated proportion burned values
+Finally we can predict the combustion status for the generated predictor variables. 
 
 ```{r}
 prediction.sol.burned <- cbind(new.sol.burned,predict(glm.sol.burned, newdata = new.sol.burned, type = 'link', se = TRUE))
 ```
 
-Generate the upper and lower confidence intervals for each prediction
+```{r}
+prediction.stand.age <- cbind(new.stand.age ,predict(glm.stand.age, newdata = new.stand.age, type = 'link', se = TRUE))
+```
+
+and generate the upper and lower confidence intervals for the fitted values. 
 
 ```{r}
 prediction.sol.burned$LL <- rev.logit(prediction.sol.burned$fit - 1.96 * prediction.sol.burned$se.fit)
@@ -733,7 +725,15 @@ prediction.sol.burned$UL <- rev.logit(prediction.sol.burned$fit + 1.96 * predict
 head(prediction.sol.burned)
 ```
 
-Plot the predicted values and their 95% CI alongside the actual data (Figure 3 from original paper)
+```{r}
+prediction.stand.age$LL <- rev.logit(prediction.stand.age$fit - 1.96 * prediction.stand.age$se.fit)
+prediction.stand.age$UL <- rev.logit(prediction.stand.age$fit + 1.96 * prediction.stand.age$se.fit)
+head(prediction.stand.age)
+```
+
+Finally we can plot the predicted values and their 95% CI alongside the actual data 
+
+![Figure 3.c and d from original paper](img/Figure3._modelpredictions.png)
 
 ```{r}
 p <- ggplot(data = prediction.sol.burned, aes(x= proportion_sol_burned, y = rev.logit(fit))) + geom_line() + geom_ribbon(data = prediction.sol.burned, aes(ymin = LL, ymax = UL), alpha = .2) + labs(x = "Proportion SOL burned", y ="Pr(Combustion)", color = 'Moisture Class', shape = 'Stand Age Class') + geom_point(data = combustion.r.data, aes(x = proportion_sol_burned, y = combust.bin, color = moisture_class, shape = stand_age_class), size = 3.5) + theme_bw() + scale_color_manual(values = c('darkgreen', 'darkred','darkblue')) + ylim(0,1)
@@ -742,24 +742,6 @@ p
 
 > Caption: Predicted probability of Legacy C combustion for the proportion of SOL burned. Actual data points are grouped by stand age class and moisture class. The ribbons represent the 95% confidence interval for the predicted values.
 
-Then we must do the same for the stand age predictor. 
-
-We can predict the combustion status for the generated stand age values. 
-
-```{r}
-prediction.stand.age <- cbind(new.stand.age ,predict(glm.stand.age, newdata = new.stand.age, type = 'link', se = TRUE))
-```
-
-and generate the upper and lower confidence intervals for each prediction. 
-
-```{r}
-prediction.stand.age$LL <- rev.logit(prediction.stand.age$fit - 1.96 * prediction.stand.age$se.fit)
-prediction.stand.age$UL <- rev.logit(prediction.stand.age$fit + 1.96 * prediction.stand.age$se.fit)
-head(prediction.stand.age)
-```
-
-
-Plot the predicted values and their 95% CI alongside the actual data (Figure 3 from original paper)
 
 ```{r}
 p <- ggplot(data = prediction.stand.age, aes(x= stand_age_rings, y = rev.logit(fit))) + geom_line() + geom_ribbon(data = prediction.stand.age, aes(ymin = LL, ymax = UL), alpha = .2) + labs(x = "Stand Age (yr)", y ="Pr(Combustion)", color = 'Moisture Class', shape = 'Stand Age Class') + geom_point(data = combustion.r.data, aes(x = stand_age_rings, y = combust.bin, color = moisture_class, shape = stand_age_class), size = 3.5) + theme_bw() + scale_color_manual(values = c('darkgreen', 'darkred','darkblue')) + ylim(0,1) + geom_vline(aes(xintercept = 60), linetype = 'dashed')
@@ -771,9 +753,9 @@ p
 
 ## Conclusion 
 
-So overall I was able to reproduce general trends similar to the original data analysis. As stand age increased, the likelihood of legacy C presence and combustion both decreased. Legacy C combustion was more likely as the proportion of the SOL burned and the presence of legacy C became more likely as the prefire SOL depth increased. These trends indicate that more frequent fire intervals and increased fire severity under climate warming are threats to boreal forests ability to act as C sinks and counteract some of the C emissions contributing to greenhouse gas formation. 
+So overall I was able to reproduce the exact figures and reproduce the trends similarly to the original data analysis. As stand age increased, the likelihood of legacy C presence and combustion both decreased. Legacy C combustion was more likely as the proportion of the SOL burned and the presence of legacy C became more likely as the prefire SOL depth increased. These trends indicate that more frequent fire intervals and increased fire severity under climate warming are threats to boreal forests ability to act as C sinks and counteract some of the C emissions contributing to greenhouse gas formation. 
 
-Where I strayed was in the statistical significance of my generalized linear model results. The original authors were able to obtain significant results for all of their analyses. They did indicate that they used Firth's logistic regression using the `{logistf}` package instead of the standard `glm()` function in the `{lmtest}` package to account for highly predictive covariates that are common in generalized linear models using smaller sample sizes. Yet when I tried running the analysis under that package the p-values seemed to be even less significant.  
+Where I strayed was in the statistical significance of my generalized linear model results. As stated in the introduction, the original authors were able to obtain significant results for all of their analyses. They did indicate that they used Firth's logistic regression using the `{logistf}` package instead of the standard `glm()` function in the `{lmtest}` package to account for highly predictive covariates that are common in generalized linear models using smaller sample sizes. Yet when I tried running the analysis under that package the p-values still showed no significance.
 
 ## References 
 
