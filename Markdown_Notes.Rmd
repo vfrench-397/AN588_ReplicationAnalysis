@@ -1,0 +1,104 @@
+---
+title: "LegacyCarbonCombustion_ReplicationAnalysis"
+author: "Victoria French"
+date: "10/26/2021"
+output: html_document
+---
+
+# Abstract 
+
+# Introduction 
+
+- Succession dynamics are controlled by fire events in fire dependent ecosystems.
+- fire events resulting in primary succession (stand replacing) scorch the top soil organic layer but there can be some C pools that are untouched creating legacy C pools. 
+- Climate change encouraging more frequent and intense fire events. 
+- Boreal forests store 30% to 40% of terrestrial C, 70% to 80% of which is stored in organic soils.
+
+# Hypotheses
+
+1. Legacy C higher in wet ecosystems (high SOM C accumulation due to low decomposition rates and low burn severity). Legacy C lower to none in dry ecosystems (low SOM accumulation and higher severity burns)
+2. Legacy C most vulnerable in moderate (moist) ecosystems due to ability to harbor legacy C but higher burn severity 
+3. Legacy C more vulnerable in young stands because overlying C pools (legacy C protective layer) not yet reaccumulated
+
+# Experimental Design 
+
+211 plots over 7 independent newly scorched (stand replacing) burn scar areas 
+
+In each plot, we measured the pre-fire tree density, basal area and stand age, and estimated the burn depth using adventitious roots. We collected 1,205 soil profiles and analysed the carbon content of 1,786 soil samples to estimate carbon pools and emissions from the fires. In 32 black-spruce-dominated plots, we measured Δ14C (the parts-per-thousand difference between the 14C/12C ratio of the sample and an international standard) on 90 soil-depth increments as an index of soil age
+
+The older a sample is, the less 14
+C there is to be detected
+
+To each plot we assigned a moisture class (wet, moist, dry) on the basis of topography, drainage, soil texture and presence of permafrost. We classified plots as young burned (stand age < 60 years at the time of fire; n = 9; mean, 45 years) or old burned (stand age > 70 years at the time of fire; n = 23; mean, 128 years) according to the historic fire-return interval of 70–130 years in northwestern boreal forests of North America
+
+We then compared the Δ14C values to the atmospheric value of Δ14CO2 during the year in which the stand established in order to assess the presence and combustion of legacy C
+
+We considered legacy C to be present if the organic soil at the base of the organic-soil profile was older than the stand age at the time of fire , and to be combusted if the organic soil at the top of the residual organic-soil
+profile was older than the stand age at the time of fire
+
+Because if the organic matter is older than the stand age since the time of fire, it was not combusted in that burning event. 
+
+# Logistic Regression Analysis 
+
+We used Firth’s bias-reduced logistic regression in
+the R package logistf43 to determine whether the stand age and the pre-fire SOL depth could predict the presence of legacy C (n = 32 plots)
+
+- Use logistic regression (a form of generalized linear model) when assumptions of a general linear model are violated and our response variable is binary. Meaning we cannot assume normal distribution of the response variable or residuals, and we cannot assume equal or constant variance in our response variable across the predictor variables. 
+
+In this case our response variable is the presence of legacy C (0 if not present, 1 if present). The independent/predictor variables are the stand age and the pre-fire soil organic layer depth. 
+
+We also used Firth’s bias reduced logistic regression to assess whether the combustion of legacy C could be predicted from the stand age and the proportion of SOL that combusted, which is a measure of fire severity. This was completed on the subset of plots in which we detected legacy C (n = 17 plots)
+
+Response variable - combustion of legacy C (combusted - 1, not combusted - 0)
+Predictor variables - stand age, proportion of soil organic layer combusted
+
+We scaled and centred all covariates and used Firth’s logistic regression because it circumvents the problem of highly predictive covariates, which are common in logistic regression of small or sparse samples
+
+# Model Selection 
+
+For both models, we first tested for an interaction among covariates using the Akaike Information Criterion for the selection of the full model(with interaction) against the reduced model (no interaction). In both cases we were able to drop the interaction and only model marginal effects (Akaike weight of the reduced model greater than 0.9)
+
+For each model, we obtained the logarithmic likelihoods (loglik) for the intercept-only model (null) and the model of interest (model) in the package logistf. We then calculated McFadden’s pseudo-R2 as [1−loglik(model)]/loglik(null)
+
+# T tests
+
+To assess whether the Δ14C values of the basal soil depth increments (n = 32), which are representative of the age of legacy C, were different for young burned plots (n = 9) and old burned plots (n = 23), we completed an independent t-test in the R base package. We also used independent t-tests to assess the difference in residual-soil-surface Δ14C values between young and old burned plots classified as pre-bomb-peak (n = 21 plots; 16 old and 5 young) and post-bomb-peak (n = 11 plots; 7 old and 5 young)
+
+# Mixed Model Analysis 
+
+We also explored the use of mixed models, using individual fires as a random effect to account for spatial non-independence, but these analyses involved neither quantitative nor qualitative changes in our results
+
+# Results 
+
+the probability of a plot harbouring legacy C increased with depth of the pre-fire organic soil (P < 0.05) and decreased with stand age (P < 0.05)
+
+In support of our hypotheses, the probability of legacy C loss increased with an increase in the proportion of pre-fire organic soil combusted (P < 0.05) and decreased with stand age (P < 0.05)
+
+Recreating Figure 3 (statistical analysis), could also copy FIgure 2 (just data presentation). 
+
+# Conclusion
+
+
+
+# Extra Code 
+
+
+
+
+```{r, eval =FALSE}
+x <- data.frame(prefire_sol_depth = seq(min(log.r.data$prefire_sol_depth),max(log.r.data$prefire_sol_depth), length.out = 32), stand_age_rings = seq(min(log.r.data$stand_age_rings),max(log.r.data$stand_age_rings), length.out = 32))
+prediction <- cbind(x, response = predict(reduced.presence, newdata = x, type = "response"))
+# IMPORTANT: Using type='response' returns predictions on the scale of our
+# Y variable, in this case Pr(admit); using the default for type would
+# return a prediction on the logit scale, i.e., the log(odds ratio), or
+# log(Pr(admit)/(1-Pr(admit)))
+head(prediction)
+```
+
+```{r, eval = FALSE}
+prediction <- cbind(x, predict(reduced.presence, newdata = x, type = "response", se = TRUE))
+prediction$LL <- prediction$fit - 1.96 * prediction$se.fit
+prediction$UL <- prediction$fit + 1.96 * prediction$se.fit
+head(prediction)
+```
+
