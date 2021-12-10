@@ -756,6 +756,10 @@ So overall I was able to reproduce the exact figures and reproduce the trends si
 
 Where I strayed was in the statistical significance of my generalized linear model results. As stated in the introduction, the original authors were able to obtain significant results for all of their analyses. They did indicate that they used Firth's logistic regression using the `{logistf}` package instead of the standard `glm()` function in the `{lmtest}` package to account for highly predictive covariates that are common in generalized linear models using smaller sample sizes. Yet when I tried running the analysis under that package the p-values still showed no significance.
 
+A note on the availability and accessibility of the data and the replication analysis: 
+
+Overall I would say the paper and the data was very accessible. The data for this paper was on a very accessibly databaase (DAAC) and the files came with a data user guide including a dataset overview and summary beyond what was outlined in the published paper. The only part I ran into was running the logistic regression as they stated they used Firth's logistic regression which I attempted and was not able to mimic their results, possibly due to them not giving enough detail about the parameters they were using. Although, the authors do specify in the concluding remarks that they are willing to share their code with anyone who contacts them directly by email. Therefore if I had been inclined to resolve this problem the exact code would have been made available to me. 
+
 ## References 
 
 1. [AN588 Module 17](https://fuzzyatelin.github.io/bioanth-stats/module-17/module-17.html)
